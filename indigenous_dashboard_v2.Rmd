@@ -1,0 +1,80 @@
+---
+title: "DEFORESTATION TRENDS IN INDIGENOUS LANDS"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+  runtime: shiny
+---
+
+```{r setup, include=FALSE}
+library(flexdashboard)
+library(leaflet)
+library(sp)
+ind.data2 <- read.csv("bnb_indigenous_format.csv")
+q1 <- read.csv("defrate_beforeafter.csv")
+load("landsgeo.RData")
+```
+
+Inputs {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+ selectInput("Name", label = h4("Select territory"), 
+    choices = sort(unique(q1$Name)), 
+    selected = 1)
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+### Forest trend over time
+
+```{r}
+  name <- reactive(input$Name)
+  renderPlot({
+    df <- ind.data2[ind.data2$Name==name(), ]
+    coefs <- q1[q1$Name==name(), ]
+    df.predict <- data.frame(forest.yr=1990:2018)
+    df.predict$pred.forest <- NA
+    ind <- df.predict$forest.yr<=df$Yr_Final[1]
+    df.predict$pred.forest[ind] <- coefs$intercept.before+df.predict$forest.yr[ind]*coefs$slope.before
+    df.predict$pred.forest[!ind] <- coefs$intercept.after+df.predict$forest.yr[!ind]*coefs$slope.after
+    plot(df.predict$forest.yr[ind], df.predict$pred.forest[ind],
+         type="l", col="red", xlim=c(1990, 2018), ylim=c(0, max(df.predict$pred.forest)), xlab="Year", ylab="Forest (ha)")
+    lines(df.predict$forest.yr[!ind], df.predict$pred.forest[!ind], col="blue")
+    lines(rep(df$Yr_Final[1], 2), c(0,max(df.predict$pred.forest)))
+    points(df$forest.yr, df$value.ha)
+    title(main=paste0(df$Name[1],"\nID=", df$OBJECTID[1]))
+    legend("bottomleft",c(paste("Rate before =", format(coefs[3], digits = 4)),
+                               paste("Rate after =", format(coefs[5], digits = 4))))
+  })
+  
+```
+
+### Forest data
+```{r}
+renderTable({
+   df <- ind.data2[ind.data2$Name==name(), ]
+   df2<-df[,c(3,4,7,9)]
+   colnames(df2)<-c("Titling Year", "Title area", "Forest Year","Forest Area (ha)")
+   df2
+})
+```
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+
+### Territory map
+
+```{r}
+renderLeaflet({
+  leaflet(lands.geo[lands.geo@data$Name==name(), ])  %>%
+    addProviderTiles(provider = "Esri.WorldImagery")  %>% 
+    addPolygons(color = "#f7f307", weight = 1, smoothFactor = 0.5,
+                  opacity = 1.0, fillOpacity = 0.3,
+                  highlightOptions = highlightOptions(color = "white", weight = 2,
+                                                      bringToFront = TRUE))
+})
+
+```
+
